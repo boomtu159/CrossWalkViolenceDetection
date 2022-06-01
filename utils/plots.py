@@ -52,6 +52,28 @@ class Annotator:
                         thickness=tf,
                         lineType=cv2.LINE_AA)
 
+    def violence_count(self, car_count, motorcycle_count):
+        org = (10, 50)
+        cv2.putText(self.im,
+                        f'Car: {car_count}', 
+                        (10, 50),
+                        0,
+                        1,
+                        (0, 255, 0),
+                        thickness=1,
+                        lineType=cv2.LINE_AA)
+        
+        cv2.putText(self.im,
+                        f'Mortorcycle: {motorcycle_count}', 
+                        (10, 100),
+                        0,
+                        1,
+                        (0, 255, 255),
+                        thickness=1,
+                        lineType=cv2.LINE_AA)
+        
+
+
     def rectangle(self, xy, fill=None, outline=None, width=1):
         # Add rectangle to image (PIL-only)
         self.draw.rectangle(xy, fill, outline, width)

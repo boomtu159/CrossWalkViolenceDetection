@@ -113,13 +113,11 @@ def yolo_detections_to_norfair_detections(
 def check_stopped_vechicle(current_vechicles, previous_vechicles):
 
     vechicles = []
-    print(f'previous = {len(previous_vechicles)}, current = {len(current_vechicles)}')
 
     for v1 in current_vechicles:
         for v2 in previous_vechicles:
             
             if abs(v1.x - v2.x) < 2 and abs(v1.y - v2.y) < 2 and abs(v1.w - v2.w) < 2 and abs(v1.h - v2.h) < 2:
-                print(f"Stopped------------------> {v1.p1}, {v2.p1}")
                 vechicles.append(v1)
         
     return vechicles
@@ -134,6 +132,7 @@ def check_traffic_violation(img, vechicles, crosswalks):
             ctop, cbot = crosswalk.p1[1], crosswalk.p2[1]
 
             if (vbot > ctop) and vleft >= cleft and vright <= cright:
+                add_only_new_vechicle(vechicle=vechicle)
                 traffic_violence_box(img, vechicle.p1, vechicle.p2)
     
     return img
@@ -146,6 +145,19 @@ def traffic_violence_box(img, p1, p2):
 
     res = cv2.addWeighted(sub_img, 0.5, white_rect, 0.5, 1.0)
     img[y:y+h, x:x+w] = res
+
+def add_only_new_vechicle(vechicle: ObjectDetected):
+    
+    if vechicle.class_name == 'car':
+        if vechicle.id not in car_violations:
+            car_violations.append(vechicle.id)
+    else:
+        if vechicle.id not in motorcycle_violation:
+            motorcycle_violation.append(vechicle.id)
+
+    print(f'Car: {car_violations}, Motorcycle: {motorcycle_violation}')
+
+
 
 parser = argparse.ArgumentParser(description="Track objects in a video.")
 parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
@@ -177,6 +189,10 @@ tracker = Tracker(
 
 paths_drawer = Paths(center, attenuation=0.01)
 previous_vechicles = []
+current_crosswalk = None
+
+car_violations = []
+motorcycle_violation = []
 
 for path, frame, im0s, vid_cap, s in dataset:
 
@@ -204,16 +220,27 @@ for path, frame, im0s, vid_cap, s in dataset:
         
         xyxy = norfair_to_yolo(boxes)
         cls = classes[obj.label]
-        label = f'ID{obj.id}: {obj.label}'
+        class_name = obj.label.lower()
+        if class_name == 'crosswalk':
+            label = f'{class_name}'
+        else:
+            # label = f'ID{obj.id}: {class_name}'
+            label = f'{obj.id}'
+
         annotator.box_label(xyxy, label, color=colors(cls, True))
 
-        obj_detected = ObjectDetected(annotator.result(), obj.label.lower(), annotator.p1, annotator.p2)
-        # Check overlap vechicle with crosswalk
+        obj_detected = ObjectDetected(img=annotator.result(), class_name=obj.label.lower(), p1=annotator.p1, p2=annotator.p2,id=obj.id,xyxy=xyxy)
+        
         if obj_detected.class_name == 'crosswalk':
             crosswalk_boxes.append(obj_detected)
+            current_crosswalk = obj_detected
         else:
             vechicle_boxes.append(obj_detected)   
 
+
+    if len(crosswalk_boxes) == 0 and current_crosswalk != None:
+        annotator.box_label(current_crosswalk.xyxy, 'crosswalk', color=colors(2, True))
+        crosswalk_boxes.append(current_crosswalk)
 
     im0 = annotator.result()
 
@@ -223,5 +250,6 @@ for path, frame, im0s, vid_cap, s in dataset:
 
     result = check_traffic_violation(im0, vechicles=stopped_vechicles, crosswalks=crosswalk_boxes)
 
+    annotator.violence_count(len(car_violations), len(motorcycle_violation))
     cv2.imshow("Img", annotator.result())
     cv2.waitKey(1)
