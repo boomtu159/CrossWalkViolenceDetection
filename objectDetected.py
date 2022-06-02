@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 class ObjectDetected:
-    def __init__(self, img=None,class_name=None, p1=(0,0), p2=(0,0), id=0, xyxy=None):
+    def __init__(self, img=None,class_name=None, p1=(0,0), p2=(0,0), id=0, xyxy=None, timestart=None):
         self.class_name=class_name
         self.p1=p1
         self.p2=p2
@@ -13,6 +13,7 @@ class ObjectDetected:
         self.h=p2[1]-p1[1]
         self.id=id
         self.xyxy=xyxy
+        self.timestart=timestart
 
     def traffic_violence_box(self):
         x, y, w, h = self.p1[0], self.p1[1], self.p2[0]-self.p1[0], self.p2[1]-self.p1[1]

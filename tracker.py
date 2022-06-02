@@ -1,6 +1,7 @@
 import argparse
 
 import numpy as np
+from sympy import false
 import torch
 import yolov5
 import os
@@ -13,6 +14,7 @@ from pathlib import Path
 import norfair
 from norfair import Detection, Tracker, Video, Paths
 from objectDetected import ObjectDetected
+import time
 
 max_distance_between_points: int = 30
 
@@ -117,10 +119,25 @@ def check_stopped_vechicle(current_vechicles, previous_vechicles):
     for v1 in current_vechicles:
         for v2 in previous_vechicles:
             
-            if abs(v1.x - v2.x) < 2 and abs(v1.y - v2.y) < 2 and abs(v1.w - v2.w) < 2 and abs(v1.h - v2.h) < 2:
-                vechicles.append(v1)
+            if v1.id == v2.id and abs(v1.x - v2.x) < 2 and abs(v1.y - v2.y) < 2 and abs(v1.w - v2.w) < 2 and abs(v1.h - v2.h) < 2:
+                add_unique_vechicle(v1)
+
+                if should_be_add_into_stop_vechicle(v1):
+                    print(f"5s stopped {v1.id}")
+                    vechicles.append(v1)
         
     return vechicles
+
+def should_be_add_into_stop_vechicle(vechicle):
+    current_time = time.time()
+    
+    for v1 in vechicles_unique_list:
+        diff_time = current_time - v1.timestart
+        if v1.id == vechicle.id and diff_time > 20:
+            return True
+
+    return False
+
 
 def check_traffic_violation(img, vechicles, crosswalks):
     for crosswalk in crosswalks:
@@ -131,6 +148,7 @@ def check_traffic_violation(img, vechicles, crosswalks):
             vtop, vbot = vechicle.p1[1], vechicle.p2[1]
             ctop, cbot = crosswalk.p1[1], crosswalk.p2[1]
 
+            # if (vbot > ctop) and vleft >= cleft and vright <= cright:
             if (vbot > ctop) and vleft >= cleft and vright <= cright:
                 add_only_new_vechicle(vechicle=vechicle)
                 traffic_violence_box(img, vechicle.p1, vechicle.p2)
@@ -146,6 +164,23 @@ def traffic_violence_box(img, p1, p2):
     res = cv2.addWeighted(sub_img, 0.5, white_rect, 0.5, 1.0)
     img[y:y+h, x:x+w] = res
 
+def add_unique_vechicle(vechicle: ObjectDetected):
+    
+    if len(vechicles_unique_list) == 0:
+        vechicle.timestart = time.time()
+        vechicles_unique_list.append(vechicle)
+        return
+
+    for v1 in vechicles_unique_list:
+        if v1.id == vechicle.id:
+            return
+            
+    
+    vechicle.timestart = time.time()
+    vechicles_unique_list.append(vechicle)
+
+    # print(f'Car: {car_violations}, Motorcycle: {motorcycle_violation}')
+
 def add_only_new_vechicle(vechicle: ObjectDetected):
     
     if vechicle.class_name == 'car':
@@ -155,7 +190,7 @@ def add_only_new_vechicle(vechicle: ObjectDetected):
         if vechicle.id not in motorcycle_violation:
             motorcycle_violation.append(vechicle.id)
 
-    print(f'Car: {car_violations}, Motorcycle: {motorcycle_violation}')
+    # print(f'Car: {car_violations}, Motorcycle: {motorcycle_violation}')
 
 
 
@@ -164,13 +199,12 @@ parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, defau
 parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
 parser.add_argument("--detector_path", type=str, default="yolov5m6.pt", help="YOLOv5 model path")
 parser.add_argument("--img_size", type=int, default="720", help="YOLOv5 inference size (pixels)")
-parser.add_argument("--conf_thres", type=float, default="0.25", help="YOLOv5 object confidence threshold")
+parser.add_argument("--conf_thres", type=float, default="0.7", help="YOLOv5 object confidence threshold")
 parser.add_argument("--iou_thresh", type=float, default="0.45", help="YOLOv5 IOU threshold for NMS")
 parser.add_argument('--classes', nargs='+', type=int, help='Filter by class: --classes 0, or --classes 0 2 3')
 parser.add_argument("--device", type=str, default=None, help="Inference device: 'cpu' or 'cuda'")
 parser.add_argument("--track_points", type=str, default="centroid", help="Track points: 'centroid' or 'bbox'")
 parser.add_argument('--source_type', type=str, default="images", help='source type')
-
 
 args = parser.parse_args()
 
@@ -179,6 +213,8 @@ source = args.source
 imgsz = args.imgsz
 source_type = args.source_type
 print(source)
+
+
 
 dataset = LoadImages(source, img_size=(640, 640), stride=32)
 
@@ -193,6 +229,8 @@ current_crosswalk = None
 
 car_violations = []
 motorcycle_violation = []
+
+vechicles_unique_list = []
 
 for path, frame, im0s, vid_cap, s in dataset:
 
@@ -235,7 +273,8 @@ for path, frame, im0s, vid_cap, s in dataset:
             crosswalk_boxes.append(obj_detected)
             current_crosswalk = obj_detected
         else:
-            vechicle_boxes.append(obj_detected)   
+            vechicle_boxes.append(obj_detected)
+            
 
 
     if len(crosswalk_boxes) == 0 and current_crosswalk != None:
@@ -249,6 +288,8 @@ for path, frame, im0s, vid_cap, s in dataset:
     previous_vechicles = vechicle_boxes.copy()
 
     result = check_traffic_violation(im0, vechicles=stopped_vechicles, crosswalks=crosswalk_boxes)
+
+    print(f"Unique count: {len(vechicles_unique_list)}")
 
     annotator.violence_count(len(car_violations), len(motorcycle_violation))
     cv2.imshow("Img", annotator.result())
